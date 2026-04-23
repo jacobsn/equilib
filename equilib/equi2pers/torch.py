@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-from functools import lru_cache
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -17,12 +16,11 @@ from equilib.torch_utils import (
 )
 
 
-@lru_cache(maxsize=128)
 def create_cam2global_matrix(
     height: int,
     width: int,
-    fov_x: float,
-    skew: float = 0.0,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor] = 0.0,
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
 ) -> torch.Tensor:
@@ -43,8 +41,8 @@ def prep_matrices(
     height: int,
     width: int,
     batch: int,
-    fov_x: float,
-    skew: float = 0.0,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor] = 0.0,
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -105,11 +103,11 @@ def convert_grid(
 
 def run(
     equi: torch.Tensor,
-    rots: List[Dict[str, float]],
+    rots: List[Dict[str, Union[float, torch.Tensor]]],
     height: int,
     width: int,
-    fov_x: float,
-    skew: float,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor],
     z_down: bool,
     mode: str,
     clip_output: bool = True,
@@ -248,11 +246,11 @@ def run(
 
 def get_bounding_fov(
     equi: torch.Tensor,
-    rots: List[Dict[str, float]],
+    rots: List[Dict[str, Union[float, torch.Tensor]]],
     height: int,
     width: int,
-    fov_x: float,
-    skew: float,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor],
     z_down: bool,
 ) -> torch.Tensor:
     assert (
