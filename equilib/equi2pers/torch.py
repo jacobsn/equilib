@@ -2,7 +2,6 @@
 
 from typing import Dict, List, Tuple, Union
 
-import numpy as np
 import torch
 
 from equilib.grid_sample import torch_grid_sample
@@ -185,9 +184,7 @@ def run(
             (bs, c, height, width), dtype=dtype, device=img_device
         )
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if equi.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
@@ -201,12 +198,12 @@ def run(
         fov_x=fov_x,
         skew=skew,
         dtype=tmp_dtype,
-        device=tmp_device,
+        device=img_device,
     )
 
     # create batched rotation matrices
     R = create_rotation_matrices(
-        rots=rots, z_down=z_down, dtype=tmp_dtype, device=tmp_device
+        rots=rots, z_down=z_down, dtype=tmp_dtype, device=img_device
     )
 
     # rotate and transform the grid
@@ -215,9 +212,6 @@ def run(
     # create a pixel map grid
     grid = convert_grid(M=M, h_equi=h_equi, w_equi=w_equi, method="robust")
 
-    # if backend == "native":
-    #     grid = grid.to(img_device)
-    # FIXME: putting `grid` to device since `pure`'s bilinear interpolation requires it
     # FIXME: better way of forcing `grid` to be the same dtype?
     if equi.dtype != grid.dtype:
         grid = grid.type(equi.dtype)
@@ -291,10 +285,9 @@ def get_bounding_fov(
         )
 
     bs, c, h_equi, w_equi = equi.shape
+    img_device = get_device(equi)
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if equi.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
@@ -308,12 +301,12 @@ def get_bounding_fov(
         fov_x=fov_x,
         skew=skew,
         dtype=tmp_dtype,
-        device=tmp_device,
+        device=img_device,
     )
 
     # create batched rotation matrices
     R = create_rotation_matrices(
-        rots=rots, z_down=z_down, dtype=tmp_dtype, device=tmp_device
+        rots=rots, z_down=z_down, dtype=tmp_dtype, device=img_device
     )
 
     # rotate and transform the grid
@@ -344,8 +337,6 @@ def get_bounding_fov(
     assert len(bboxs) == width * 2 + (height - 2) * 2
 
     bboxs = torch.stack(bboxs, dim=1)
-
-    bboxs = bboxs.numpy()
-    bboxs = np.rint(bboxs).astype(np.int64)
+    bboxs = torch.round(bboxs).to(torch.int64)
 
     return bboxs

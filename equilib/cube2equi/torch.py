@@ -318,9 +318,7 @@ def run(
             (bs, c, height, width), dtype=dtype, device=horizon_device
         )
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if horizon.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
@@ -333,7 +331,7 @@ def run(
         w_face=w_face,
         batch=bs,
         dtype=tmp_dtype,
-        device=tmp_device,
+        device=horizon_device,
     )
 
     # FIXME: putting `grid` to device since `pure`'s bilinear interpolation requires it

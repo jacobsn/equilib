@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-from functools import lru_cache
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
-import numpy as np
 import torch
 
 from equilib.grid_sample import torch_grid_sample
@@ -17,12 +15,11 @@ from equilib.torch_utils import (
 )
 
 
-@lru_cache(maxsize=128)
 def create_global2cam_matrix(
     height: int,
     width: int,
-    fov_x: float,
-    skew: float = 0.0,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor] = 0.0,
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
 ) -> torch.Tensor:
@@ -45,8 +42,8 @@ def prep_matrices(
     h_pers: int,
     w_pers: int,
     batch: int,
-    fov_x: float,
-    skew: float = 0.0,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor] = 0.0,
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -95,11 +92,11 @@ def convert_grid(
 
 def run(
     pers: torch.Tensor,
-    rots: List[Dict[str, float]],
+    rots: List[Dict[str, Union[float, torch.Tensor]]],
     height: int,
     width: int,
-    fov_x: float,
-    skew: float,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor],
     z_down: bool,
     mode: str,
     clip_output: bool = True,
@@ -177,9 +174,7 @@ def run(
             (bs, c, height, width), dtype=dtype, device=img_device
         )
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if pers.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
@@ -195,12 +190,12 @@ def run(
         fov_x=fov_x,
         skew=skew,
         dtype=tmp_dtype,
-        device=tmp_device,
+        device=img_device,
     )
 
     # create batched rotation matrices
     R = create_rotation_matrices(
-        rots=rots, z_down=z_down, dtype=tmp_dtype, device=tmp_device
+        rots=rots, z_down=z_down, dtype=tmp_dtype, device=img_device
     )
 
     # rotate and transform the grid

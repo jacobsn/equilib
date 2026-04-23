@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 
@@ -54,7 +54,7 @@ def convert_grid(
 
 def run(
     src: torch.Tensor,
-    rots: List[Dict[str, float]],
+    rots: List[Dict[str, Union[float, torch.Tensor]]],
     z_down: bool,
     mode: str,
     height: Optional[int] = None,
@@ -149,22 +149,20 @@ def run(
             device=src_device,
         )
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if src.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
         tmp_dtype = dtype
 
     m = create_normalized_grid(
-        height=height, width=width, batch=bs, dtype=tmp_dtype, device=tmp_device
+        height=height, width=width, batch=bs, dtype=tmp_dtype, device=src_device
     )
     m = m.unsqueeze(-1)
 
     # create batched rotation matrices
     R = create_rotation_matrices(
-        rots=rots, z_down=z_down, dtype=tmp_dtype, device=tmp_device
+        rots=rots, z_down=z_down, dtype=tmp_dtype, device=src_device
     )
 
     # rotate the grid
