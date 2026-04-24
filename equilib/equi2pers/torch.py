@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Dict, List, Tuple, Union
+import warnings
 
 import torch
 
@@ -137,6 +138,24 @@ def run(
     assert len(equi) == len(
         rots
     ), f"ERR: length of equi and rot differs: {len(equi)} vs {len(rots)}"
+
+    if mode == "nearest":
+        _rot_tensors = [
+            v for rot in rots for v in rot.values() if isinstance(v, torch.Tensor)
+        ]
+        _extra = [fov_x, skew]
+        if any(
+            t.requires_grad
+            for t in _rot_tensors + _extra
+            if isinstance(t, torch.Tensor)
+        ):
+            warnings.warn(
+                "mode='nearest' is not differentiable: gradients w.r.t. rotation "
+                "and FoV/skew parameters will be zero. "
+                "Use mode='bilinear' or mode='bicubic' when gradients are needed.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     equi_dtype = equi.dtype
     assert equi_dtype in (

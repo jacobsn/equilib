@@ -26,6 +26,8 @@ sampling step being differentiable:
   or bicubic interpolation.
 """
 
+import warnings
+
 import pytest
 import torch
 
@@ -439,4 +441,60 @@ def test_pers2equi_bicubic_grad_nonzero(param_name: str) -> None:
     grad = params[param_name].grad
     assert grad is not None, f"{param_name}.grad is None"
     assert grad.abs() > 0, f"{param_name}.grad is zero with bicubic"
+
+
+# ---------------------------------------------------------------------------
+# Warning tests: mode='nearest' with requires_grad=True emits UserWarning
+# ---------------------------------------------------------------------------
+
+
+def _assert_nearest_warning(fn) -> None:
+    """Assert that calling *fn* emits a UserWarning mentioning 'nearest'."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        fn()
+    assert any(
+        issubclass(warning.category, UserWarning) and "nearest" in str(warning.message)
+        for warning in w
+    ), "Expected a UserWarning about 'nearest' mode"
+
+
+def test_equi2pers_nearest_warns_on_grad() -> None:
+    """equi2pers emits UserWarning when mode='nearest' and a parameter has requires_grad."""
+    params = _make_params(_E2P_BASE, "roll")
+    _assert_nearest_warning(lambda: _e2p_mode(**params, mode="nearest"))
+
+
+def test_equi2equi_nearest_warns_on_grad() -> None:
+    """equi2equi emits UserWarning when mode='nearest' and a parameter has requires_grad."""
+    params = _make_params(_E2E_BASE, "pitch")
+    _assert_nearest_warning(lambda: _e2e_mode(**params, mode="nearest"))
+
+
+def test_equi2cube_nearest_warns_on_grad() -> None:
+    """equi2cube emits UserWarning when mode='nearest' and a parameter has requires_grad."""
+    params = _make_params(_E2C_BASE, "yaw")
+    _assert_nearest_warning(lambda: _e2c_mode(**params, mode="nearest"))
+
+
+def test_pers2equi_nearest_warns_on_grad() -> None:
+    """pers2equi emits UserWarning when mode='nearest' and a parameter has requires_grad."""
+    params = _make_params(_P2E_BASE, "roll")
+    _assert_nearest_warning(lambda: _p2e_mode(**params, mode="nearest"))
+
+
+def test_no_warning_when_no_grad() -> None:
+    """No UserWarning is emitted when mode='nearest' and no parameter requires grad."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        equi2pers_run(
+            equi=_equi(),
+            rots=[{"roll": 0.1, "pitch": 0.2, "yaw": 0.3}],
+            height=16, width=16, fov_x=90.0, skew=0.0, z_down=True, mode="nearest",
+        )
+    nearest_warnings = [
+        x for x in w
+        if issubclass(x.category, UserWarning) and "nearest" in str(x.message)
+    ]
+    assert len(nearest_warnings) == 0, "Unexpected warning when no parameter requires grad"
 
