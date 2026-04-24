@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
-from functools import lru_cache
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
+import warnings
 
-import numpy as np
 import torch
 
 from equilib.grid_sample import torch_grid_sample
@@ -17,12 +16,11 @@ from equilib.torch_utils import (
 )
 
 
-@lru_cache(maxsize=128)
 def create_cam2global_matrix(
     height: int,
     width: int,
-    fov_x: float,
-    skew: float = 0.0,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor] = 0.0,
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
 ) -> torch.Tensor:
@@ -43,8 +41,8 @@ def prep_matrices(
     height: int,
     width: int,
     batch: int,
-    fov_x: float,
-    skew: float = 0.0,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor] = 0.0,
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -105,11 +103,11 @@ def convert_grid(
 
 def run(
     equi: torch.Tensor,
-    rots: List[Dict[str, float]],
+    rots: List[Dict[str, Union[float, torch.Tensor]]],
     height: int,
     width: int,
-    fov_x: float,
-    skew: float,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor],
     z_down: bool,
     mode: str,
     clip_output: bool = True,
@@ -140,6 +138,24 @@ def run(
     assert len(equi) == len(
         rots
     ), f"ERR: length of equi and rot differs: {len(equi)} vs {len(rots)}"
+
+    if mode == "nearest":
+        _rot_tensors = [
+            v for rot in rots for v in rot.values() if isinstance(v, torch.Tensor)
+        ]
+        _extra = [fov_x, skew]
+        if any(
+            t.requires_grad
+            for t in _rot_tensors + _extra
+            if isinstance(t, torch.Tensor)
+        ):
+            warnings.warn(
+                "mode='nearest' is not differentiable: gradients w.r.t. rotation "
+                "and FoV/skew parameters will be zero. "
+                "Use mode='bilinear' or mode='bicubic' when gradients are needed.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     equi_dtype = equi.dtype
     assert equi_dtype in (
@@ -187,9 +203,7 @@ def run(
             (bs, c, height, width), dtype=dtype, device=img_device
         )
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if equi.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
@@ -203,12 +217,12 @@ def run(
         fov_x=fov_x,
         skew=skew,
         dtype=tmp_dtype,
-        device=tmp_device,
+        device=img_device,
     )
 
     # create batched rotation matrices
     R = create_rotation_matrices(
-        rots=rots, z_down=z_down, dtype=tmp_dtype, device=tmp_device
+        rots=rots, z_down=z_down, dtype=tmp_dtype, device=img_device
     )
 
     # rotate and transform the grid
@@ -217,9 +231,6 @@ def run(
     # create a pixel map grid
     grid = convert_grid(M=M, h_equi=h_equi, w_equi=w_equi, method="robust")
 
-    # if backend == "native":
-    #     grid = grid.to(img_device)
-    # FIXME: putting `grid` to device since `pure`'s bilinear interpolation requires it
     # FIXME: better way of forcing `grid` to be the same dtype?
     if equi.dtype != grid.dtype:
         grid = grid.type(equi.dtype)
@@ -248,11 +259,11 @@ def run(
 
 def get_bounding_fov(
     equi: torch.Tensor,
-    rots: List[Dict[str, float]],
+    rots: List[Dict[str, Union[float, torch.Tensor]]],
     height: int,
     width: int,
-    fov_x: float,
-    skew: float,
+    fov_x: Union[float, torch.Tensor],
+    skew: Union[float, torch.Tensor],
     z_down: bool,
 ) -> torch.Tensor:
     assert (
@@ -293,10 +304,9 @@ def get_bounding_fov(
         )
 
     bs, c, h_equi, w_equi = equi.shape
+    img_device = get_device(equi)
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if equi.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
@@ -310,12 +320,12 @@ def get_bounding_fov(
         fov_x=fov_x,
         skew=skew,
         dtype=tmp_dtype,
-        device=tmp_device,
+        device=img_device,
     )
 
     # create batched rotation matrices
     R = create_rotation_matrices(
-        rots=rots, z_down=z_down, dtype=tmp_dtype, device=tmp_device
+        rots=rots, z_down=z_down, dtype=tmp_dtype, device=img_device
     )
 
     # rotate and transform the grid
@@ -346,8 +356,6 @@ def get_bounding_fov(
     assert len(bboxs) == width * 2 + (height - 2) * 2
 
     bboxs = torch.stack(bboxs, dim=1)
-
-    bboxs = bboxs.numpy()
-    bboxs = np.rint(bboxs).astype(np.int64)
+    bboxs = torch.round(bboxs).to(torch.int64)
 
     return bboxs

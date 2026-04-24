@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Dict, List, Union
+import warnings
 
 import torch
 
@@ -111,7 +112,7 @@ def convert_grid(
 
 def run(
     equi: torch.Tensor,
-    rots: List[Dict[str, float]],
+    rots: List[Dict[str, Union[float, torch.Tensor]]],
     w_face: int,
     cube_format: str,
     z_down: bool,
@@ -145,6 +146,19 @@ def run(
     assert len(equi) == len(
         rots
     ), f"ERR: length of equi and rot differs: {len(equi)} vs {len(rots)}"
+
+    if mode == "nearest":
+        _rot_tensors = [
+            v for rot in rots for v in rot.values() if isinstance(v, torch.Tensor)
+        ]
+        if any(t.requires_grad for t in _rot_tensors):
+            warnings.warn(
+                "mode='nearest' is not differentiable: gradients w.r.t. rotation "
+                "parameters will be zero. "
+                "Use mode='bilinear' or mode='bicubic' when gradients are needed.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     equi_dtype = equi.dtype
     assert equi_dtype in (
@@ -192,9 +206,7 @@ def run(
             (bs, c, w_face, w_face * 6), dtype=dtype, device=img_device
         )
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if equi.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
@@ -202,7 +214,7 @@ def run(
 
     # create grid
     xyz = create_xyz_grid(
-        w_face=w_face, batch=bs, dtype=tmp_dtype, device=tmp_device
+        w_face=w_face, batch=bs, dtype=tmp_dtype, device=img_device
     )
     xyz = xyz.unsqueeze(-1)
 
@@ -212,7 +224,7 @@ def run(
     z_down = not z_down
     # create batched rotation matrices
     R = create_rotation_matrices(
-        rots=rots, z_down=z_down, dtype=tmp_dtype, device=tmp_device
+        rots=rots, z_down=z_down, dtype=tmp_dtype, device=img_device
     )
 
     # rotate grid

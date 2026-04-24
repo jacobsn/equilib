@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
+import warnings
 
 import torch
 
@@ -54,7 +55,7 @@ def convert_grid(
 
 def run(
     src: torch.Tensor,
-    rots: List[Dict[str, float]],
+    rots: List[Dict[str, Union[float, torch.Tensor]]],
     z_down: bool,
     mode: str,
     height: Optional[int] = None,
@@ -91,6 +92,19 @@ def run(
     assert len(src) == len(
         rots
     ), f"ERR: length of `src` and `rot` differs: {len(src)} vs {len(rots)}"
+
+    if mode == "nearest":
+        _rot_tensors = [
+            v for rot in rots for v in rot.values() if isinstance(v, torch.Tensor)
+        ]
+        if any(t.requires_grad for t in _rot_tensors):
+            warnings.warn(
+                "mode='nearest' is not differentiable: gradients w.r.t. rotation "
+                "parameters will be zero. "
+                "Use mode='bilinear' or mode='bicubic' when gradients are needed.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     src_dtype = src.dtype
     assert src_dtype in (
@@ -149,22 +163,20 @@ def run(
             device=src_device,
         )
 
-    # FIXME: for now, calculate the grid in cpu
-    # I need to benchmark performance of it when grid is created on cuda
-    tmp_device = torch.device("cpu")
+    # NOTE: for cuda with float16, use float32 for intermediate computations
     if src.device.type == "cuda" and dtype == torch.float16:
         tmp_dtype = torch.float32
     else:
         tmp_dtype = dtype
 
     m = create_normalized_grid(
-        height=height, width=width, batch=bs, dtype=tmp_dtype, device=tmp_device
+        height=height, width=width, batch=bs, dtype=tmp_dtype, device=src_device
     )
     m = m.unsqueeze(-1)
 
     # create batched rotation matrices
     R = create_rotation_matrices(
-        rots=rots, z_down=z_down, dtype=tmp_dtype, device=tmp_device
+        rots=rots, z_down=z_down, dtype=tmp_dtype, device=src_device
     )
 
     # rotate the grid
