@@ -4,6 +4,7 @@ from equilib.cube2equi.base import Cube2Equi, cube2equi
 from equilib.equi2cube.base import Equi2Cube, equi2cube
 from equilib.equi2equi.base import Equi2Equi, equi2equi
 from equilib.equi2pers.base import Equi2Pers, equi2pers
+from equilib.multiscale import make_equi_pyramid
 from equilib.pers2equi.base import Pers2Equi, pers2equi
 from equilib.info import __version__  # noqa
 
@@ -16,6 +17,7 @@ __all__ = [
     "equi2cube",
     "equi2equi",
     "equi2pers",
+    "make_equi_pyramid",
     "pers2equi",
     "Pers2Equi",
 ]
