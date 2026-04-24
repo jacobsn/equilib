@@ -10,6 +10,20 @@ Each test verifies two things:
 
 All tests run in ``float64`` on CPU so that numerical precision is not a
 limiting factor.
+
+Interpolation mode and differentiability
+-----------------------------------------
+Gradient flow through the rotation/FoV parameters depends entirely on the
+sampling step being differentiable:
+
+* ``mode="bilinear"``  — **differentiable**: uses ``F.grid_sample`` bilinear
+  weights that carry gradient back through the pixel-coordinate grid.
+* ``mode="bicubic"``   — **differentiable**: uses ``F.grid_sample`` bicubic
+  weights, same reasoning.
+* ``mode="nearest"``   — **NOT differentiable**: the output is piecewise
+  constant in the grid coordinates, so the gradient w.r.t. rotation / FoV
+  params is identically zero.  Users who need gradients *must* use bilinear
+  or bicubic interpolation.
 """
 
 import pytest
@@ -283,3 +297,146 @@ def test_pers2equi_grad_accuracy(param_name: str) -> None:
         f"pers2equi param={param_name}: analytical={analytical:.6f}, "
         f"numerical={numerical:.6f}, rel_err={rel_err:.4f}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Interpolation mode tests
+#
+# mode="nearest"  → NOT differentiable: gradient w.r.t. rotation/FoV is zero.
+# mode="bicubic"  → differentiable:     gradient is non-zero (same as bilinear).
+# ---------------------------------------------------------------------------
+
+
+# -- helpers that expose the `mode` argument --------------------------------
+
+def _e2p_mode(roll, pitch, yaw, fov_x, mode, equi=None):
+    if equi is None:
+        equi = _equi()
+    return equi2pers_run(
+        equi=equi,
+        rots=[{"roll": roll, "pitch": pitch, "yaw": yaw}],
+        height=16, width=16, fov_x=fov_x, skew=0.0, z_down=True, mode=mode,
+    )
+
+
+def _e2e_mode(roll, pitch, yaw, mode, src=None):
+    if src is None:
+        src = _equi()
+    return equi2equi_run(
+        src=src,
+        rots=[{"roll": roll, "pitch": pitch, "yaw": yaw}],
+        z_down=True, mode=mode,
+    )
+
+
+def _e2c_mode(roll, pitch, yaw, mode, equi=None):
+    if equi is None:
+        equi = _equi()
+    return equi2cube_run(
+        equi=equi,
+        rots=[{"roll": roll, "pitch": pitch, "yaw": yaw}],
+        w_face=8, cube_format="horizon", z_down=True, mode=mode,
+    )
+
+
+def _p2e_mode(roll, pitch, yaw, fov_x, mode, pers=None):
+    if pers is None:
+        pers = _pers()
+    return pers2equi_run(
+        pers=pers,
+        rots=[{"roll": roll, "pitch": pitch, "yaw": yaw}],
+        height=32, width=64, fov_x=fov_x, skew=0.0, z_down=True, mode=mode,
+    )
+
+
+# -- nearest-neighbor: gradient must be zero --------------------------------
+
+@pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
+def test_equi2pers_nearest_grad_is_zero(param_name: str) -> None:
+    """equi2pers mode='nearest': gradient w.r.t. rotation/FoV is zero (not differentiable)."""
+    params = _make_params(_E2P_BASE, param_name)
+    _e2p_mode(**params, mode="nearest").sum().backward()
+    assert params[param_name].grad is not None
+    assert params[param_name].grad.abs() == 0.0, (
+        f"expected zero gradient with nearest for {param_name}, "
+        f"got {params[param_name].grad.item()}"
+    )
+
+
+@pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
+def test_equi2equi_nearest_grad_is_zero(param_name: str) -> None:
+    """equi2equi mode='nearest': gradient w.r.t. rotation is zero (not differentiable)."""
+    params = _make_params(_E2E_BASE, param_name)
+    _e2e_mode(**params, mode="nearest").sum().backward()
+    assert params[param_name].grad is not None
+    assert params[param_name].grad.abs() == 0.0, (
+        f"expected zero gradient with nearest for {param_name}, "
+        f"got {params[param_name].grad.item()}"
+    )
+
+
+@pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
+def test_equi2cube_nearest_grad_is_zero(param_name: str) -> None:
+    """equi2cube mode='nearest': gradient w.r.t. rotation is zero (not differentiable)."""
+    params = _make_params(_E2C_BASE, param_name)
+    _e2c_mode(**params, mode="nearest").sum().backward()
+    assert params[param_name].grad is not None
+    assert params[param_name].grad.abs() == 0.0, (
+        f"expected zero gradient with nearest for {param_name}, "
+        f"got {params[param_name].grad.item()}"
+    )
+
+
+@pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
+def test_pers2equi_nearest_grad_is_zero(param_name: str) -> None:
+    """pers2equi mode='nearest': gradient w.r.t. rotation is zero (not differentiable)."""
+    params = _make_params(_P2E_BASE, param_name)
+    _p2e_mode(**params, mode="nearest").sum().backward()
+    assert params[param_name].grad is not None
+    assert params[param_name].grad.abs() == 0.0, (
+        f"expected zero gradient with nearest for {param_name}, "
+        f"got {params[param_name].grad.item()}"
+    )
+
+
+# -- bicubic: gradient must be non-zero ------------------------------------
+
+@pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
+def test_equi2pers_bicubic_grad_nonzero(param_name: str) -> None:
+    """equi2pers mode='bicubic': rotation/FoV parameter receives a non-zero gradient."""
+    params = _make_params(_E2P_BASE, param_name)
+    _e2p_mode(**params, mode="bicubic").sum().backward()
+    grad = params[param_name].grad
+    assert grad is not None, f"{param_name}.grad is None"
+    assert grad.abs() > 0, f"{param_name}.grad is zero with bicubic"
+
+
+@pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
+def test_equi2equi_bicubic_grad_nonzero(param_name: str) -> None:
+    """equi2equi mode='bicubic': rotation parameter receives a non-zero gradient."""
+    params = _make_params(_E2E_BASE, param_name)
+    _e2e_mode(**params, mode="bicubic").sum().backward()
+    grad = params[param_name].grad
+    assert grad is not None, f"{param_name}.grad is None"
+    assert grad.abs() > 0, f"{param_name}.grad is zero with bicubic"
+
+
+@pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
+def test_equi2cube_bicubic_grad_nonzero(param_name: str) -> None:
+    """equi2cube mode='bicubic': rotation parameter receives a non-zero gradient."""
+    params = _make_params(_E2C_BASE, param_name)
+    _e2c_mode(**params, mode="bicubic").sum().backward()
+    grad = params[param_name].grad
+    assert grad is not None, f"{param_name}.grad is None"
+    assert grad.abs() > 0, f"{param_name}.grad is zero with bicubic"
+
+
+@pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
+def test_pers2equi_bicubic_grad_nonzero(param_name: str) -> None:
+    """pers2equi mode='bicubic': rotation parameter receives a non-zero gradient."""
+    params = _make_params(_P2E_BASE, param_name)
+    _p2e_mode(**params, mode="bicubic").sum().backward()
+    grad = params[param_name].grad
+    assert grad is not None, f"{param_name}.grad is None"
+    assert grad.abs() > 0, f"{param_name}.grad is zero with bicubic"
+
