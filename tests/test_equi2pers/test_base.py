@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from copy import deepcopy
+import math
 import os
 
 import numpy as np
@@ -185,9 +186,8 @@ def test_numpy_fov_y() -> None:
     rot = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     height, width = 32, 64
     fov_x = 90.0
-    # Derive expected fov_y from aspect ratio (should give identical result to
-    # omitting fov_y since square pixels are assumed by default).
-    import math
+    # Derive fov_y from aspect ratio (should give identical result to omitting
+    # fov_y since square pixels are assumed by default).
     fov_y = math.degrees(2 * math.atan(math.tan(math.radians(fov_x) / 2) * height / width))
 
     out_default = equi2pers(equi=img, rots=rot, height=height, width=width, fov_x=fov_x)
@@ -208,7 +208,6 @@ def test_torch_fov_y() -> None:
     rot = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     height, width = 32, 64
     fov_x = 90.0
-    import math
     fov_y = math.degrees(2 * math.atan(math.tan(math.radians(fov_x) / 2) * height / width))
 
     out_default = equi2pers(equi=img.clone(), rots=rot, height=height, width=width, fov_x=fov_x)
