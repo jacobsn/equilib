@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 import warnings
 
 import torch
@@ -23,6 +23,7 @@ def create_cam2global_matrix(
     skew: Union[float, torch.Tensor] = 0.0,
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
+    fov_y: Optional[Union[float, torch.Tensor]] = None,
 ) -> torch.Tensor:
     K = create_intrinsic_matrix(
         height=height,
@@ -31,6 +32,7 @@ def create_cam2global_matrix(
         skew=skew,
         dtype=dtype,
         device=device,
+        fov_y=fov_y,
     )
     g2c_rot = create_global2camera_rotation_matrix(dtype=dtype, device=device)
 
@@ -45,6 +47,7 @@ def prep_matrices(
     skew: Union[float, torch.Tensor] = 0.0,
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
+    fov_y: Optional[Union[float, torch.Tensor]] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     m = create_grid(
         height=height, width=width, batch=batch, dtype=dtype, device=device
@@ -57,6 +60,7 @@ def prep_matrices(
         skew=skew,
         dtype=dtype,
         device=device,
+        fov_y=fov_y,
     )
 
     return m, G
@@ -112,6 +116,7 @@ def run(
     mode: str,
     clip_output: bool = True,
     backend: str = "native",
+    fov_y: Optional[Union[float, torch.Tensor]] = None,
 ) -> torch.Tensor:
     """Run Equi2Pers
 
@@ -124,6 +129,8 @@ def run(
     - z_down (bool)
     - mode (str): sampling mode for grid_sample
     - backend (str): backend of torch `grid_sample` (default: `native`)
+    - fov_y (float or torch.Tensor, optional): fov of vertical axis in degrees;
+      when provided, ``fy`` is set independently of ``fx``
 
     returns:
     - out (torch.Tensor)
@@ -143,7 +150,7 @@ def run(
         _rot_tensors = [
             v for rot in rots for v in rot.values() if isinstance(v, torch.Tensor)
         ]
-        _extra = [fov_x, skew]
+        _extra = [fov_x, skew, fov_y]
         if any(
             t.requires_grad
             for t in _rot_tensors + _extra
@@ -218,6 +225,7 @@ def run(
         skew=skew,
         dtype=tmp_dtype,
         device=img_device,
+        fov_y=fov_y,
     )
 
     # create batched rotation matrices
@@ -265,6 +273,7 @@ def get_bounding_fov(
     fov_x: Union[float, torch.Tensor],
     skew: Union[float, torch.Tensor],
     z_down: bool,
+    fov_y: Optional[Union[float, torch.Tensor]] = None,
 ) -> torch.Tensor:
     assert (
         len(equi.shape) == 4
@@ -321,6 +330,7 @@ def get_bounding_fov(
         skew=skew,
         dtype=tmp_dtype,
         device=img_device,
+        fov_y=fov_y,
     )
 
     # create batched rotation matrices

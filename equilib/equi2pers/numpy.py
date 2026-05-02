@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Tuple, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -21,9 +21,10 @@ def create_cam2global_matrix(
     fov_x: float,
     skew: float = 0.0,
     dtype: np.dtype = np.dtype(np.float32),
+    fov_y: Optional[float] = None,
 ) -> np.ndarray:
     K = create_intrinsic_matrix(
-        height=height, width=width, fov_x=fov_x, skew=skew, dtype=dtype
+        height=height, width=width, fov_x=fov_x, skew=skew, dtype=dtype, fov_y=fov_y
     )
     g2c_rot = create_global2camera_rotation_matrix(dtype=dtype)
 
@@ -40,11 +41,12 @@ def prep_matrices(
     fov_x: float,
     skew: float = 0.0,
     dtype: np.dtype = np.dtype(np.float32),
+    fov_y: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     m = create_grid(height=height, width=width, batch=batch, dtype=dtype)
     m = m[..., np.newaxis]
     G = create_cam2global_matrix(
-        height=height, width=width, fov_x=fov_x, skew=skew, dtype=dtype
+        height=height, width=width, fov_x=fov_x, skew=skew, dtype=dtype, fov_y=fov_y
     )
 
     return m, G
@@ -128,6 +130,7 @@ def run(
     mode: str,
     clip_output: bool = True,
     override_func: Optional[Callable[[], Any]] = None,
+    fov_y: Optional[float] = None,
 ) -> np.ndarray:
     """Run Equi2Pers
 
@@ -140,6 +143,8 @@ def run(
     - z_down (bool)
     - mode (str): sampling mode for grid_sample
     - override_func (Callable): function for overriding `grid_sample`
+    - fov_y (float, optional): fov of vertical axis in degrees; when provided,
+      ``fy`` is set independently of ``fx`` for non-square-pixel support
 
     return:
     - out (np.ndarray)
@@ -194,6 +199,7 @@ def run(
         fov_x=fov_x,
         skew=skew,
         dtype=dtype,
+        fov_y=fov_y,
     )
 
     # create batched rotation matrices
@@ -236,6 +242,7 @@ def get_bounding_fov(
     fov_x: float,
     skew: float,
     z_down: bool,
+    fov_y: Optional[float] = None,
 ) -> np.ndarray:
     # NOTE: Assume that the inputs `equi` and `rots` are already batched up
     assert (
@@ -274,6 +281,7 @@ def get_bounding_fov(
         fov_x=fov_x,
         skew=skew,
         dtype=dtype,
+        fov_y=fov_y,
     )
 
     # create batched rotation matrices
