@@ -75,7 +75,8 @@ def test_intrinsic_matrix_gradcheck() -> None:
 
 
 def test_intrinsic_matrix_fov_y_gradcheck() -> None:
-    """create_intrinsic_matrix with fov_y: Jacobians match finite differences."""
+    """create_intrinsic_matrix with fov_y: Jacobians w.r.t. both fov_x and fov_y
+    match finite differences."""
     dtype = torch.float64
     device = torch.device("cpu")
 
