@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -45,7 +45,7 @@ class Equi2Pers(object):
         height: int,
         width: int,
         fov_x: float,
-        fov_y: float = None,
+        fov_y: Optional[float] = None,
         skew: float = 0.0,
         z_down: bool = False,
         mode: str = "bilinear",
@@ -99,7 +99,7 @@ def equi2pers(
     height: int,
     width: int,
     fov_x: float,
-    fov_y: float = None,
+    fov_y: Optional[float] = None,
     skew: float = 0.0,
     mode: str = "bilinear",
     z_down: bool = False,
@@ -188,7 +188,7 @@ def get_bounding_fov(
     height: int,
     width: int,
     fov_x: float,
-    fov_y: float = None,
+    fov_y: Optional[float] = None,
     skew: float = 0.0,
     z_down: bool = False,
 ) -> np.ndarray:
