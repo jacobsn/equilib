@@ -33,6 +33,18 @@ where `cx = width / 2`, `cy = height / 2`, and:
 
 For square pixels the two formulations are equivalent — specifying `fov_y` is useful when the vertical FOV is known directly or when the pixel aspect ratio differs from 1.
 
+### Example
+
+```python
+from equilib import equi2pers
+
+# Default: fy is derived from fov_x + aspect ratio (square pixels assumed)
+pers = equi2pers(equi, rots, height=480, width=640, fov_x=90.0)
+
+# Explicit fov_y: set vertical FOV independently (e.g. from a camera datasheet)
+pers = equi2pers(equi, rots, height=480, width=640, fov_x=90.0, fov_y=67.4)
+```
+
 ### TODO:
 
 - [x] Crop is slightly different `numpy` and `torch` (FIXED)
