@@ -74,6 +74,26 @@ def test_intrinsic_matrix_gradcheck() -> None:
     )
 
 
+def test_intrinsic_matrix_fov_y_gradcheck() -> None:
+    """create_intrinsic_matrix with fov_y: Jacobians w.r.t. both fov_x and fov_y
+    match finite differences."""
+    dtype = torch.float64
+    device = torch.device("cpu")
+
+    fov_x = torch.tensor(90.0, dtype=dtype, requires_grad=True)
+    fov_y = torch.tensor(67.38, dtype=dtype, requires_grad=True)
+    skew = torch.tensor(0.0, dtype=dtype, requires_grad=True)
+
+    def fn(fx, fy, s):
+        return create_intrinsic_matrix(
+            height=48, width=64, fov_x=fx, skew=s, dtype=dtype, device=device, fov_y=fy
+        )
+
+    torch.autograd.gradcheck(
+        fn, (fov_x, fov_y, skew), eps=1e-6, rtol=1e-4, atol=1e-5
+    )
+
+
 @pytest.mark.parametrize("param_name", ["roll", "pitch", "yaw"])
 def test_rotation_matrix_grad_nonzero(param_name: str) -> None:
     """Each rotation angle produces a non-zero gradient in the output matrix."""
@@ -114,3 +134,20 @@ def test_intrinsic_matrix_grad_nonzero() -> None:
 
     assert fov_x.grad is not None
     assert fov_x.grad.abs() > 0
+
+
+def test_intrinsic_matrix_fov_y_grad_nonzero() -> None:
+    """fov_y produces a non-zero gradient in the intrinsic matrix when provided."""
+    dtype = torch.float64
+    device = torch.device("cpu")
+
+    fov_x = torch.tensor(90.0, dtype=dtype, requires_grad=False)
+    fov_y = torch.tensor(67.38, dtype=dtype, requires_grad=True)
+    K = create_intrinsic_matrix(
+        height=48, width=64, fov_x=fov_x, skew=0.0, dtype=dtype, device=device,
+        fov_y=fov_y,
+    )
+    K.sum().backward()
+
+    assert fov_y.grad is not None
+    assert fov_y.grad.abs() > 0

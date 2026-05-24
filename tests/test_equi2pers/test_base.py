@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from copy import deepcopy
+import math
 import os
 
 import numpy as np
@@ -177,3 +178,45 @@ def test_torch_single(
         mode=mode,
         dtype=dtype,
     )
+
+
+def test_numpy_fov_y() -> None:
+    """equi2pers with explicit fov_y produces the correct output shape and dtype."""
+    img = get_numpy_img(dtype=np.float32)
+    rot = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
+    height, width = 32, 64
+    fov_x = 90.0
+    # Derive fov_y from aspect ratio (should give identical result to omitting
+    # fov_y since square pixels are assumed by default).
+    fov_y = math.degrees(2 * math.atan(math.tan(math.radians(fov_x) / 2) * height / width))
+
+    out_default = equi2pers(equi=img, rots=rot, height=height, width=width, fov_x=fov_x)
+    out_fov_y = equi2pers(equi=img, rots=rot, height=height, width=width, fov_x=fov_x, fov_y=fov_y)
+
+    assert out_fov_y.shape == (3, height, width)
+    assert out_fov_y.dtype == np.float32
+    np.testing.assert_allclose(out_default, out_fov_y, rtol=1e-5, atol=1e-5)
+
+    # Verify that a different fov_y produces a different result
+    out_wide = equi2pers(equi=img, rots=rot, height=height, width=width, fov_x=fov_x, fov_y=fov_y * 1.5)
+    assert not np.allclose(out_default, out_wide, rtol=1e-5, atol=1e-5)
+
+
+def test_torch_fov_y() -> None:
+    """equi2pers with explicit fov_y produces the correct output shape and dtype."""
+    img = get_torch_img(dtype=torch.float32)
+    rot = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
+    height, width = 32, 64
+    fov_x = 90.0
+    fov_y = math.degrees(2 * math.atan(math.tan(math.radians(fov_x) / 2) * height / width))
+
+    out_default = equi2pers(equi=img.clone(), rots=rot, height=height, width=width, fov_x=fov_x)
+    out_fov_y = equi2pers(equi=img.clone(), rots=rot, height=height, width=width, fov_x=fov_x, fov_y=fov_y)
+
+    assert out_fov_y.shape == (3, height, width)
+    assert out_fov_y.dtype == torch.float32
+    torch.testing.assert_close(out_default, out_fov_y, rtol=1e-4, atol=1e-4)
+
+    # Verify that a different fov_y produces a different result
+    out_wide = equi2pers(equi=img.clone(), rots=rot, height=height, width=width, fov_x=fov_x, fov_y=fov_y * 1.5)
+    assert not torch.allclose(out_default, out_wide, rtol=1e-5, atol=1e-5)

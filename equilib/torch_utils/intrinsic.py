@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Union
+from typing import Optional, Union
 
 import torch
 
@@ -19,15 +19,21 @@ def create_intrinsic_matrix(
     skew: Union[float, torch.Tensor],
     dtype: torch.dtype = torch.float32,
     device: torch.device = torch.device("cpu"),
+    fov_y: Optional[Union[float, torch.Tensor]] = None,
 ) -> torch.Tensor:
     """Create intrinsic matrix
 
     params:
     - height, width (int)
-    - fov_x (float or torch.Tensor): make sure it's in degrees
+    - fov_x (float or torch.Tensor): horizontal field of view in degrees
     - skew (float or torch.Tensor): 0.0
     - dtype (torch.dtype): torch.float32
     - device (torch.device): torch.device("cpu")
+    - fov_y (float or torch.Tensor, optional): vertical field of view in
+      degrees.  When provided, ``fy`` is computed directly from ``fov_y``
+      which allows for non-square pixels or explicit vertical-FOV control.
+      When ``None`` (default), ``fy`` is derived from ``fov_x`` and the
+      aspect ratio, which is equivalent to assuming square pixels.
 
     returns:
     - K (torch.tensor): 3x3 intrinsic matrix
@@ -37,18 +43,34 @@ def create_intrinsic_matrix(
     if not isinstance(skew, torch.Tensor):
         skew = torch.tensor(skew, dtype=dtype, device=device)
 
-    f = width / (2 * torch.tan(deg2rad(fov_x) / 2))
-    f = f.squeeze()  # ensure scalar (0-d) shape for scalar fov_x inputs
+    # horizontal focal length
+    fx = width / (2 * torch.tan(deg2rad(fov_x) / 2))
+    fx = fx.squeeze()  # ensure scalar (0-d) shape for scalar fov_x inputs
 
-    zeros = f.new_zeros(())
-    ones = f.new_ones(())
-    width_half = f.new_tensor(width / 2)
-    height_half = f.new_tensor(height / 2)
+    # vertical focal length: use fov_y if given, otherwise derive from fov_x
+    if fov_y is not None:
+        if not isinstance(fov_y, torch.Tensor):
+            fov_y = torch.tensor(fov_y, dtype=dtype, device=device)
+        fy = height / (2 * torch.tan(deg2rad(fov_y) / 2))
+        fy = fy.squeeze()
+    else:
+        fy = height / (
+            2
+            * torch.tan(
+                torch.atan(torch.tan(deg2rad(fov_x) / 2) * height / width)
+            )
+        )
+        fy = fy.squeeze()
+
+    zeros = fx.new_zeros(())
+    ones = fx.new_ones(())
+    width_half = fx.new_tensor(width / 2)
+    height_half = fx.new_tensor(height / 2)
 
     K = torch.stack(
         [
-            torch.stack([f, skew, width_half]),
-            torch.stack([zeros, f, height_half]),
+            torch.stack([fx, skew, width_half]),
+            torch.stack([zeros, fy, height_half]),
             torch.stack([zeros, zeros, ones]),
         ]
     )

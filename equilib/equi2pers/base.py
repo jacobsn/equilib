@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -19,7 +19,12 @@ class Equi2Pers(object):
     """
     params:
     - height, width (int): perspective size
-    - fov_x (float): perspective image fov of x-axis
+    - fov_x (float): perspective image fov of x-axis in degrees
+    - fov_y (float, optional): perspective image fov of y-axis in degrees;
+      when provided, the vertical focal length is set independently of the
+      horizontal focal length, enabling non-square pixels or direct vertical
+      FOV control.  When omitted (default), ``fy`` is derived from ``fov_x``
+      and the image aspect ratio (equivalent to square pixels).
     - skew (float): skew intrinsic parameter
     - sampling_method (str)
     - z_down (bool)
@@ -40,6 +45,7 @@ class Equi2Pers(object):
         height: int,
         width: int,
         fov_x: float,
+        fov_y: Optional[float] = None,
         skew: float = 0.0,
         z_down: bool = False,
         mode: str = "bilinear",
@@ -48,6 +54,7 @@ class Equi2Pers(object):
         self.height = height
         self.width = width
         self.fov_x = fov_x
+        self.fov_y = fov_y
         self.skew = skew
         self.mode = mode
         self.z_down = z_down
@@ -65,6 +72,7 @@ class Equi2Pers(object):
             height=self.height,
             width=self.width,
             fov_x=self.fov_x,
+            fov_y=self.fov_y,
             skew=self.skew,
             z_down=self.z_down,
             mode=self.mode,
@@ -79,6 +87,7 @@ class Equi2Pers(object):
             height=self.height,
             width=self.width,
             fov_x=self.fov_x,
+            fov_y=self.fov_y,
             skew=self.skew,
             z_down=self.z_down,
         )
@@ -90,6 +99,7 @@ def equi2pers(
     height: int,
     width: int,
     fov_x: float,
+    fov_y: Optional[float] = None,
     skew: float = 0.0,
     mode: str = "bilinear",
     z_down: bool = False,
@@ -101,7 +111,12 @@ def equi2pers(
     - equi
     - rots
     - height, width (int): perspective size
-    - fov_x (float): perspective image fov of x-axis
+    - fov_x (float): perspective image fov of x-axis in degrees
+    - fov_y (float, optional): perspective image fov of y-axis in degrees;
+      when provided, the vertical focal length is set independently of the
+      horizontal focal length, enabling non-square pixels or direct vertical
+      FOV control.  When omitted (default), ``fy`` is derived from ``fov_x``
+      and the image aspect ratio (equivalent to square pixels).
     - z_down (bool)
     - skew (float): skew intrinsic parameter
 
@@ -136,6 +151,7 @@ def equi2pers(
             height=height,
             width=width,
             fov_x=fov_x,
+            fov_y=fov_y,
             skew=skew,
             z_down=z_down,
             clip_output=clip_output,
@@ -149,6 +165,7 @@ def equi2pers(
             height=height,
             width=width,
             fov_x=fov_x,
+            fov_y=fov_y,
             skew=skew,
             z_down=z_down,
             clip_output=clip_output,
@@ -171,6 +188,7 @@ def get_bounding_fov(
     height: int,
     width: int,
     fov_x: float,
+    fov_y: Optional[float] = None,
     skew: float = 0.0,
     z_down: bool = False,
 ) -> np.ndarray:
@@ -200,6 +218,7 @@ def get_bounding_fov(
             height=height,
             width=width,
             fov_x=fov_x,
+            fov_y=fov_y,
             skew=skew,
             z_down=z_down,
         )
@@ -210,6 +229,7 @@ def get_bounding_fov(
             height=height,
             width=width,
             fov_x=fov_x,
+            fov_y=fov_y,
             skew=skew,
             z_down=z_down,
         )
